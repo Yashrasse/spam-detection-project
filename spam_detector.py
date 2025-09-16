@@ -226,8 +226,10 @@ def generate_sample_data():
     ]
     
     ham_messages = [
+        "bro","sister","how are you"
+        "hello",
         "hi name",
-        "need rs"
+        "hello it's me",
         "hi my name is 23444",
         "Hey, are we still meeting for lunch tomorrow?",
         "Thanks for the great presentation today!",
