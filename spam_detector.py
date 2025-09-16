@@ -351,8 +351,8 @@ if app_mode == "🔍 Make Prediction":
                     df = load_and_preprocess_data()
                     
                     # Default training configuration
-                    test_size = 0.50
-                    random_state = 50
+                    test_size = 0.3
+                    random_state = 42
                     use_processed = True
                     
                     # Prepare data
