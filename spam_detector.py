@@ -20,7 +20,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import warnings
 warnings.filterwarnings('ignore')
-
+from sklearn.svm import SVC
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
 
 
 # background image
@@ -195,65 +197,117 @@ def preprocess_text(text):
     
     return text
 
-# Generate sample dataset
 @st.cache_data
 def generate_sample_data():
-    # Sample spam and ham messages
-    spam_messages = [
-        "Congratulations! You've won $1000! Click here to claim now!",
-        "URGENT: Your account will be closed. Call 123-456-7890 immediately!",
-        "Free iPhone! Limited time offer! Text STOP to unsubscribe.",
-        "You've been selected for a free cruise! Call now!",
-        "Make money fast! Work from home opportunity!",
-        "WINNER! You've won a lottery! Send your bank details!",
-        "Exclusive deal! 90% off everything! Buy now!",
-        "Your credit card has been charged $500. Call to dispute!",
-        "Free gift card worth $100! Click link to redeem!",
-        "Lose weight fast! Miracle pill available now!",
-        "Nigerian prince needs help transferring money. Reward offered!",
-        "Your subscription expires today! Renew now for discount!",
-        "Hot singles in your area! Meet tonight!",
-        "You owe money! Pay immediately or face legal action!",
-        "Free vacation! All expenses paid! Call now!",
-        "Medicine at 70% discount! No prescription needed!",
-        "Make $5000 per week working from home!",
-        "Your package is delayed. Click to track!",
-        "Tax refund available! Claim now before it expires!",
-        "Free ringtones! Download now!",
-        "Click on this link to get free gifts",
-        "Make 5000rs per week working from home!",
-        "Hey, it's I'm in a meeting now and need your help with something urgent. Can you transfer $5,000 to this account ASAP? I'll explain everything later. Please keep this confidential."
-    ]
+    # Load CSV and select only relevant columns to avoid unnamed NaN columns
+    df = pd.read_csv("spam.csv")[['label', 'message']]
     
-    ham_messages = [
-        "bro","sister","how are you"
-        "hello",
-        "hi name",
-        "hello it's me",
-        "hi my name is 23444",
-        "Hey, are we still meeting for lunch tomorrow?",
-        "Thanks for the great presentation today!",
-        "Can you send me the project files by Friday?",
-        "Don't forget about the team meeting at 2 PM.",
-        "Happy birthday! Hope you have a wonderful day!",
-        "The weather is perfect for a walk today.",
-        "I'll pick up groceries on my way home.",
-        "Great job on the presentation! Well done!",
-        "See you at the conference next week.",
-        "Please review the attached document when you get a chance.",
-        "The movie was amazing! You should watch it.",
-        "Thanks for helping me with the project.",
-        "Let me know when you're free to chat.",
-        "The restaurant was booked, let's try somewhere else.",
-        "I'm running 10 minutes late for our meeting.",
-        "Could you please check your email?",
-        "The package arrived safely, thank you!",
-        "Looking forward to our vacation next month!",
-        "The new policy takes effect next Monday.",
-        "Have a safe trip! Text me when you arrive."
-    ]
+    # Drop rows where 'message' is NaN (if any)
+    df = df.dropna(subset=['message'])
     
-    # Create DataFrame
+    # Ensure labels are lowercase for consistency (e.g., 'ham' not 'Ham')
+    df['label'] = df['label'].str.lower()
+    
+    # If you need to add random duplicates/variations
+    spam_messages = df[df['label'] == 'spam']['message'].tolist()
+    ham_messages = df[df['label'] == 'ham']['message'].tolist()
+    messages = spam_messages + ham_messages
+    labels = ['spam'] * len(spam_messages) + ['ham'] * len(ham_messages)
+    
+    additional_data = []
+    for i in range(30):  # Same as original
+        idx = np.random.randint(0, len(messages))
+        additional_data.append({
+            'message': messages[idx],
+            'label': labels[idx]
+        })
+    
+    additional_df = pd.DataFrame(additional_data)
+    df = pd.concat([df, additional_df], ignore_index=True)
+    
+    # Ensure each class has at least 2 samples to allow stratified split
+    class_counts = df['label'].value_counts()
+    for label in class_counts.index:
+        if class_counts[label] < 2:
+            min_samples = df[df['label'] == label]
+            df = pd.concat([df, min_samples], ignore_index=True)  # Duplicate to make ≥2
+    
+    return df
+
+
+
+
+#Generate sample dataset
+# @st.cache_data
+# def generate_sample_data():
+#     # Sample spam and ham messages
+#     spam_messages = [
+#         "Congratulations! You've won $1000! Click here to claim now!",
+#         "URGENT: Your account will be closed. Call 123-456-7890 immediately!",
+#         "Free iPhone! Limited time offer! Text STOP to unsubscribe.",
+#         "You've been selected for a free cruise! Call now!",
+#         "Make money fast! Work from home opportunity!",
+#         "WINNER! You've won a lottery! Send your bank details!",
+#         "Exclusive deal! 90% off everything! Buy now!",
+#         "Your credit card has been charged $500. Call to dispute!",
+#         "Free gift card worth $100! Click link to redeem!",
+#         "Lose weight fast! Miracle pill available now!",
+#         "Nigerian prince needs help transferring money. Reward offered!",
+#         "Your subscription expires today! Renew now for discount!",
+#         "Hot singles in your area! Meet tonight!",
+#         "You owe money! Pay immediately or face legal action!",
+#         "Free vacation! All expenses paid! Call now!",
+#         "Medicine at 70% discount! No prescription needed!",
+#         "Make $5000 per week working from home!",
+#         "Your package is delayed. Click to track!",
+#         "Tax refund available! Claim now before it expires!",
+#         "Free ringtones! Download now!",
+#         "Click on this link to get free gifts",
+#         "Make 5000rs per week working from home!",
+#         "Hey, it's I'm in a meeting now and need your help with something urgent. Can you transfer $5,000 to this account ASAP? I'll explain everything later. Please keep this confidential.",
+#         "CONGRATULATIONS! You have been selected to receive a cash prize of $10000! Reply YES to claim",
+#         "URGENT! Your bank account has been compromised. Click here to secure it immediately",
+#         "LIMITED TIME: Get 99% discount on all products! Hurry up!",
+#         "You are a WINNER! Claim your prize money now before it expires!",
+#         "ALERT: Suspicious activity detected. Verify your account details immediately",
+#         "Free money! No strings attached! Click to get instant cash",
+#         "Your loan has been approved for $50000! Apply now!"
+#     ]
+    
+#     ham_messages = [
+#         "Hey, are we still meeting for lunch tomorrow?",
+#         "Thanks for the great presentation today!",
+#         "Can you send me the project files by Friday?",
+#         "Don't forget about the team meeting at 2 PM.",
+#         "Happy birthday! Hope you have a wonderful day!",
+#         "The weather is perfect for a walk today.",
+#         "I'll pick up groceries on my way home.",
+#         "Great job on the presentation! Well done!",
+#         "See you at the conference next week.",
+#         "Please review the attached document when you get a chance.",
+#         "The movie was amazing! You should watch it.",
+#         "Thanks for helping me with the project.",
+#         "Let me know when you're free to chat.",
+#         "The restaurant was booked, let's try somewhere else.",
+#         "I'm running 10 minutes late for our meeting.",
+#         "Could you please check your email?",
+#         "The package arrived safely, thank you!",
+#         "Looking forward to our vacation next month!",
+#         "The new policy takes effect next Monday.",
+#         "Have a safe trip! Text me when you arrive.",
+#         "Hello, how are you doing today?",
+#         "Hi there, just checking in on you",
+#         "Good morning! Hope you have a great day",
+#         "Thanks for your help with the assignment",
+#         "The meeting has been rescheduled to 3 PM",
+#         "Can you please bring the documents tomorrow?",
+#         "I enjoyed our conversation yesterday",
+#         "The event was really successful, well organized",
+#         "Please let me know if you need any assistance",
+#         "Have a wonderful weekend with your family"
+#     ]
+    
+# Create DataFrame
     messages = spam_messages + ham_messages
     labels = ['spam'] * len(spam_messages) + ['ham'] * len(ham_messages)
     
@@ -286,20 +340,128 @@ def load_and_preprocess_data():
     return df
 
 # Train models
+# @st.cache_resource
+# def train_models(X_train, X_test, y_train, y_test):
+#     models = {
+#         'Naive Bayes': Pipeline([
+#             ('tfidf', TfidfVectorizer(max_features=1000, stop_words='english',ngram_range=(1, 2))),
+#             ('classifier', MultinomialNB(alpha=1.0))
+#         ]),
+#         'Logistic Regression': Pipeline([
+#             ('tfidf', TfidfVectorizer(max_features=1000, stop_words='english',ngram_range=(1, 2))),
+#             ('classifier', LogisticRegression(random_state=42,max_iter=1000))
+#         ]),
+#         'Random Forest': Pipeline([
+#             ('tfidf', TfidfVectorizer(max_features=1000, stop_words='english')),
+#             ('classifier', RandomForestClassifier(n_estimators=100, random_state=50,))
+#         ])
+#     }
+    
+#     trained_models = {}
+#     model_scores = {}
+    
+#     for name, model in models.items():
+#         model.fit(X_train, y_train)
+#         y_pred = model.predict(X_test)
+#         accuracy = accuracy_score(y_test, y_pred)
+        
+#         trained_models[name] = model
+#         model_scores[name] = {
+#             'accuracy': accuracy,
+#             'predictions': y_pred
+#         }
+    
+#     return trained_models, model_scores
+
 @st.cache_resource
 def train_models(X_train, X_test, y_train, y_test):
     models = {
         'Naive Bayes': Pipeline([
-            ('tfidf', TfidfVectorizer(max_features=1000, stop_words='english')),
-            ('classifier', MultinomialNB())
+            ('tfidf', TfidfVectorizer(
+                max_features=2000,  # Increased from 1000
+                stop_words='english',
+                ngram_range=(1, 3),  # Include trigrams for better context
+                min_df=2,  # Ignore terms that appear in less than 2 documents
+                max_df=0.9,  # Ignore terms that appear in more than 90% of documents
+                sublinear_tf=True  # Apply sublinear tf scaling
+            )),
+            ('classifier', MultinomialNB(alpha=0.1))  # Reduced alpha for less smoothing
         ]),
+        
         'Logistic Regression': Pipeline([
-            ('tfidf', TfidfVectorizer(max_features=1000, stop_words='english')),
-            ('classifier', LogisticRegression(random_state=42))
+            ('tfidf', TfidfVectorizer(
+                max_features=2000,
+                stop_words='english',
+                ngram_range=(1, 3),
+                min_df=2,
+                max_df=0.9,
+                sublinear_tf=True
+            )),
+            ('classifier', LogisticRegression(
+                random_state=42,
+                max_iter=2000,  # Increased iterations
+                C=10.0,  # Regularization strength (higher = less regularization)
+                class_weight='balanced',  # Handle class imbalance
+                solver='liblinear'  # Better for smaller datasets
+            ))
         ]),
+        
         'Random Forest': Pipeline([
-            ('tfidf', TfidfVectorizer(max_features=1000, stop_words='english')),
-            ('classifier', RandomForestClassifier(n_estimators=100, random_state=50))
+            ('tfidf', TfidfVectorizer(
+                max_features=2000,
+                stop_words='english',
+                ngram_range=(1, 2),  # Reduced for Random Forest to avoid overfitting
+                min_df=2,
+                max_df=0.9,
+                sublinear_tf=True
+            )),
+            ('classifier', RandomForestClassifier(
+                n_estimators=200,  # Increased from 100
+                random_state=42,
+                max_depth=15,  # Increased from 10
+                min_samples_split=5,  # Prevent overfitting
+                min_samples_leaf=2,  # Prevent overfitting
+                class_weight='balanced',  # Handle class imbalance
+                bootstrap=True
+            ))
+        ]),
+        
+        # Added: Support Vector Machine for better performance
+        'SVM': Pipeline([
+            ('tfidf', TfidfVectorizer(
+                max_features=1500,
+                stop_words='english',
+                ngram_range=(1, 2),
+                min_df=2,
+                max_df=0.9,
+                sublinear_tf=True
+            )),
+            ('classifier', SVC(
+                random_state=42,
+                kernel='linear',  # Linear kernel works well for text
+                C=1.0,
+                class_weight='balanced',
+                probability=True  # Enable probability predictions
+            ))
+        ]),
+        
+        # Added: Gradient Boosting for ensemble learning
+        'Gradient Boosting': Pipeline([
+            ('tfidf', TfidfVectorizer(
+                max_features=1500,
+                stop_words='english',
+                ngram_range=(1, 2),
+                min_df=2,
+                max_df=0.9,
+                sublinear_tf=True
+            )),
+            ('classifier', GradientBoostingClassifier(
+                random_state=42,
+                n_estimators=100,
+                learning_rate=0.1,
+                max_depth=7,
+                subsample=0.8
+            ))
         ])
     }
     
@@ -307,17 +469,54 @@ def train_models(X_train, X_test, y_train, y_test):
     model_scores = {}
     
     for name, model in models.items():
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-        accuracy = accuracy_score(y_test, y_pred)
-        
-        trained_models[name] = model
-        model_scores[name] = {
-            'accuracy': accuracy,
-            'predictions': y_pred
-        }
+        try:
+            # Train the model
+            model.fit(X_train, y_train)
+            
+            # Make predictions
+            y_pred = model.predict(X_test)
+            y_pred_proba = model.predict_proba(X_test)
+            
+            # Calculate multiple metrics for better evaluation
+            accuracy = accuracy_score(y_test, y_pred)
+            
+            # Calculate F1 score (harmonic mean of precision and recall)
+            from sklearn.metrics import f1_score, precision_score, recall_score
+            f1 = f1_score(y_test, y_pred, pos_label='spam', average='binary')
+            precision = precision_score(y_test, y_pred, pos_label='spam', average='binary')
+            recall = recall_score(y_test, y_pred, pos_label='spam', average='binary')
+            
+            # Calculate ROC AUC score
+            from sklearn.metrics import roc_auc_score
+            # Get probability for spam class
+            spam_idx = list(model.classes_).index('spam') if 'spam' in model.classes_ else 1
+            y_test_binary = (y_test == 'spam').astype(int)
+            auc = roc_auc_score(y_test_binary, y_pred_proba[:, spam_idx])
+            
+            # Composite score combining multiple metrics
+            composite_score = (accuracy * 0.3) + (f1 * 0.4) + (auc * 0.3)
+            
+            trained_models[name] = model
+            model_scores[name] = {
+                'accuracy': accuracy,
+                'f1_score': f1,
+                'precision': precision,
+                'recall': recall,
+                'auc': auc,
+                'composite_score': composite_score,  # Use this for model selection
+                'predictions': y_pred
+            }
+            
+        except Exception as e:
+            print(f"Error training {name}: {str(e)}")
+            continue
     
     return trained_models, model_scores
+
+
+
+
+
 
 # Main app logic
 
@@ -341,11 +540,22 @@ if app_mode == "🔍 Make Prediction":
                                    placeholder="Type or paste your message here...",
                                    height=150)
         
-        if st.button("🔍 Predict", type="primary") and message_input:
-            # Auto-train models if not already trained
-            if 'trained_models' not in st.session_state:
-                #st.info("🤖 Training models automatically for first-time prediction...")
-                
+        if st.button("🔍 Predict", type="primary"):
+            if not message_input.strip():
+                st.error("❌ Please enter a valid message to analyze.")
+            else:
+                # Auto-train models if not already trained
+                needs_retraining = ('trained_models' not in st.session_state or 
+                                'model_scores' not in st.session_state or
+                                # Check if old format (missing new metrics)
+                                any('f1_score' not in score_data for score_data in st.session_state.get('model_scores', {}).values()))
+                if needs_retraining:
+                    # Clear old session state to force retraining
+                    if 'trained_models' in st.session_state:
+                        del st.session_state.trained_models
+                    if 'model_scores' in st.session_state:
+                        del st.session_state.model_scores
+
                 with st.spinner("Loading data and training models... Please wait!"):
                     # Load and preprocess data
                     df = load_and_preprocess_data()
@@ -374,468 +584,166 @@ if app_mode == "🔍 Make Prediction":
                     st.session_state.y_test = y_test
                     
                     #st.success("✅ Models trained successfully!")
-            
-            # Now make predictions with trained models
-            processed_message = preprocess_text(message_input)
-            
-            # Get all model predictions and find the best one
-            model_results = {}
-            all_predictions = {}
-            
-            with st.spinner("Running all models and selecting the best..."):
-                for model_name, model in st.session_state.trained_models.items():
-                    prediction = model.predict([processed_message])[0]
-                    probability = model.predict_proba([processed_message])[0]
-                    
-                    # Get probabilities
-                    prob_spam = probability[1] if model.classes_[1] == 'spam' else probability[0]
-                    prob_ham = probability[0] if model.classes_[0] == 'ham' else probability[1]
-                    
-                    # Get model accuracy from session state
-                    model_accuracy = st.session_state.model_scores[model_name]['accuracy']
-                    
-                    model_results[model_name] = {
-                        'prediction': prediction,
-                        'prob_spam': prob_spam,
-                        'prob_ham': prob_ham,
-                        'accuracy': model_accuracy,
-                        'confidence': prob_spam if prediction == 'spam' else prob_ham
-                    }
-                    
-                    all_predictions[model_name] = {
-                        'prediction': prediction,
-                        'confidence': prob_spam if prediction == 'spam' else prob_ham
-                    }
-            
-            # Find the best model (highest accuracy)
-            best_model_name = max(model_results.keys(), key=lambda x: model_results[x]['accuracy'])
-            best_result = model_results[best_model_name]
-            
-            # Display BEST PREDICTION RESULT prominently
-            st.subheader("📋 PREDICTION RESULT")
-            
-            if best_result['prediction'] == 'spam':
-                st.markdown(f"""
-                <div style="
-                    background: linear-gradient(135deg, #000000, #FF0000);
-                    padding: 25px;
-                    border-radius: 15px;
-                    border-left: 3px solid #FF0000;
-                    margin: 20px 0;
-                    box-shadow: 0 8px 25px rgba(255, 107, 107, 0.3);
-                    color: white;
-                    text-align: center;
-                ">
-                    <h2 style="margin: 0; font-size: 2.2em;">🚨 SPAM DETECTED: Fraud Message </h2>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div style="
-                    background: linear-gradient(135deg, #000000, #00FF57);
-                    padding: 25px;
-                    border-radius: 15px;
-                    border-left: 3px solid #00FF57;
-                    margin: 20px 0;
-                    box-shadow: 0 8px 25px rgba(46, 213, 115, 0.3);
-                    color: white;
-                    text-align: center;
-                ">
-                    <h2 style="margin: 0; font-size: 2.2em;">✅ NOT A SPAM: Real message</h2>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # Show all model results in expandable section
-            with st.expander("📊 View All Model Results"):
-                st.subheader("🎯 All Model Predictions")
                 
-                # Sort models by accuracy (descending)
-                sorted_models = sorted(model_results.items(), key=lambda x: x[1]['accuracy'], reverse=True)
+                # Now make predictions with trained models
+                processed_message = preprocess_text(message_input)
                 
-                for i, (model_name, result) in enumerate(sorted_models):
-                    rank_emoji = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"{i+1}."
+                # Get all model predictions and find the best one
+                model_results = {}
+                all_predictions = {}
+                
+                with st.spinner("Running all models and selecting the best..."):
+                    for model_name, model in st.session_state.trained_models.items():
+                        try:
+                            prediction = model.predict([processed_message])[0]
+                            probability = model.predict_proba([processed_message])[0]
+                            
+                            # Get probabilities
+                            prob_spam = probability[1] if model.classes_[1] == 'spam' else probability[0]
+                            prob_ham = probability[0] if model.classes_[0] == 'ham' else probability[1]
+                            
+                            model_metrics = st.session_state.model_scores[model_name]
+            
+                            model_results[model_name] = {
+                                'prediction': prediction,
+                                'prob_spam': prob_spam,
+                                'prob_ham': prob_ham,
+                                'accuracy': model_metrics.get('accuracy', 0),
+                                'f1_score': model_metrics.get('f1_score', 0),
+                                'precision': model_metrics.get('precision', 0),
+                                'recall': model_metrics.get('recall', 0),
+                                'auc': model_metrics.get('auc', 0),
+                                'composite_score': model_metrics.get('composite_score', model_metrics.get('accuracy', 0)),
+                                'confidence': prob_spam if prediction == 'spam' else prob_ham
+                            }
+                        except Exception as e:
+                            st.error(f"Error with model {model_name}: {str(e)}")
+                            continue
+                        all_predictions[model_name] = {
+                            'prediction': prediction,
+                            'confidence': prob_spam if prediction == 'spam' else prob_ham
+                        }
                     
-                    if result['prediction'] == 'spam':
-                        st.markdown(f"""
-                        <div style="
-                            background: {'linear-gradient(135deg, #000000, #ff8e8e)' if i == 0 else "#e2cbcf"};
-                            padding: 15px;
-                            border-radius: 10px;
-                            border-left: 3px solid #fc0303;
-                            margin: 10px 0;
-                            {'color: white;' if i == 0 else 'color: #333;'}
-                        ">
-                            <h4>{rank_emoji} {model_name}: SPAM DETECTED</h4>
-                            <p><strong>Accuracy:</strong> {result['accuracy']:.1%} | <strong>Confidence:</strong> {result['prob_spam']:.1%}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
+                    # Find the best model using composite score (or accuracy as fallback)
+                    if model_results:
+                        best_model_name = max(model_results.keys(), key=lambda x: model_results[x]['composite_score'])
+                        best_result = model_results[best_model_name]
+                        
+                        # Display BEST PREDICTION RESULT prominently
+                        st.subheader("📋 PREDICTION RESULT")
+                        
+                        if best_result['prediction'] == 'spam':
+                            st.markdown(f"""
+                            <div style="
+                                background: linear-gradient(135deg, #000000, #FF0000);
+                                padding: 25px;
+                                border-radius: 15px;
+                                border-left: 3px solid #FF0000;
+                                margin: 20px 0;
+                                box-shadow: 0 8px 25px rgba(255, 107, 107, 0.3);
+                                color: white;
+                                text-align: center;
+                            ">
+                                <h2 style="margin: 0; font-size: 2.2em;">🚨 SPAM DETECTED: Fraud Message </h2>
+                                <p style="font-size: 1.1em; margin-top: 10px;">Best Model: {best_model_name} | Confidence: {best_result['confidence']:.1%}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div style="
+                                background: linear-gradient(135deg, #000000, #00FF57);
+                                padding: 25px;
+                                border-radius: 15px;
+                                border-left: 3px solid #00FF57;
+                                margin: 20px 0;
+                                box-shadow: 0 8px 25px rgba(46, 213, 115, 0.3);
+                                color: white;
+                                text-align: center;
+                            ">
+                                <h2 style="margin: 0; font-size: 2.2em;">✅ NOT A SPAM: It's a Real message</h2>
+                            <p style="font-size: 1.1em; margin-top: 10px;">Best Model: {best_model_name} | Confidence: {best_result['confidence']:.1%}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        
+                        # Show all model results in expandable section
+                        with st.expander("📊 View All Model Results"):
+                            st.subheader("🎯 All Model Predictions")
+                            
+                            # Sort models by accuracy (descending)
+                            sorted_models = sorted(model_results.items(), key=lambda x: x[1]['composite_score'], reverse=True)
+                            
+                            for i, (model_name, result) in enumerate(sorted_models):
+                                rank_emoji = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"{i+1}."
+
+                                metrics_text = f"<strong>Score:</strong> {result['composite_score']:.1%} | <strong>Confidence:</strong> {result['confidence']:.1%}"
+                                # Add additional metrics if available
+
+                                if result['f1_score'] > 0:
+                                    metrics_text += f"<br><strong>Accuracy:</strong> {result['accuracy']:.1%} | <strong>F1:</strong> {result['f1_score']:.1%} | <strong>AUC:</strong> {result['auc']:.1%}"
+                                
+                                if result['prediction'] == 'spam':
+                                    st.markdown(f"""
+                                    <div style="
+                                        background: {'linear-gradient(135deg, #000000, #ff0000)' if i == 0 else "#FBBDC6"};
+                                        padding: 15px;
+                                        border-radius: 10px;
+                                        border-left: 3px solid #fc0303;
+                                        margin: 10px 0;
+                                        {'color: white;' if i == 0 else 'color: #333;'}
+                                    ">
+                                        <h4>{rank_emoji} {model_name}: SPAM DETECTED</h4>
+                                        <p>{metrics_text}</p>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                else:
+                                    st.markdown(f"""
+                                    <div style="
+                                        background: {'linear-gradient(135deg, #000000, #00ff00)' if i == 0 else "#EBFEEB"};
+                                        padding: 15px;
+                                        border-radius: 10px;
+                                        border-left: 3px solid #0bfc03;
+                                        margin: 10px 0;
+                                        {'color: white;' if i == 0 else 'color: #333;'}
+                                    ">
+                                        <h4>{rank_emoji} {model_name}: NOT A SPAM</h4>
+                                        <p>{metrics_text}</p>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                        
+                        # Message analysis
+                        st.subheader("📊 Message Analysis")
+                        
+                        col1, col2, col3, col4, col5 = st.columns(5)
+
+                        with col1:
+                            st.metric("📝 Message Length", len(message_input))
+
+                        with col2:
+                            st.metric("📢 Word Count", len(message_input.split()))
+
+                        with col3:
+                            char_density = len(message_input.replace(' ', ''))/len(message_input) if message_input else 0
+                            st.metric("🔤 Character Density", f"{char_density:.2f}")
+
+                        with col4:
+                            # Count of models that detected spam
+                            spam_detections = sum(1 for result in model_results.values() if result['prediction'] == 'spam')
+                            st.metric("🤖 Models Detecting Spam", f"{spam_detections}/{len(model_results)}")
+
+                        with col5:
+                            # Average confidence across all models
+                            avg_confidence = sum(result['confidence'] for result in model_results.values()) / len(model_results)
+                            st.metric("📊 Avg Confidence", f"{avg_confidence:.1%}")
+
                     else:
-                        st.markdown(f"""
-                        <div style="
-                            background: {'linear-gradient(135deg, #000000, #7bed9f)' if i == 0 else "#C1C9C1"};
-                            padding: 15px;
-                            border-radius: 10px;
-                            border-left: 3px solid #0bfc03;
-                            margin: 10px 0;
-                            {'color: white;' if i == 0 else 'color: #333;'}
-                        ">
-                            <h4>{rank_emoji} {model_name}: NOT A SPAM</h4>
-                            <p><strong>Accuracy:</strong> {result['accuracy']:.1%} | <strong>Confidence:</strong> {result['prob_ham']:.1%}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-            
-            # Message analysis
-            st.subheader("📊 Message Analysis")
-            
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("📏 Message Length", len(message_input))
-            
-            with col2:
-                st.metric("🔢 Word Count", len(message_input.split()))
-            
-            with col3:
-                char_density = len(message_input.replace(' ', ''))/len(message_input) if message_input else 0
-                st.metric("🔤 Character Density", f"{char_density:.2f}")
-            
-            with col4:
-                # Count of models that detected spam
-                spam_detections = sum(1 for result in model_results.values() if result['prediction'] == 'spam')
-                st.metric("🤖 Models Detecting Spam", f"{spam_detections}/{len(model_results)}")
-
-
-            # Show processed version
-            with st.expander("🔍 View Processed Message"):
-                st.write("**Original:**", message_input)
-                st.write("**Processed:**", processed_message)
+                        st.error("❌ Error: No models available for prediction. Please try again.")
+                # Show processed version
+                with st.expander("🔍 View Processed Message"):
+                    st.write("**Original:**", message_input)
+                    st.write("**Processed:**", processed_message)
         # Machine Learning Models Section
     #with st.expander("Used -🤖 Machine Learning Models "):
-        st.subheader("🤖 Machine Learning Models :")
-    
-        col1, col2, col3 = st.columns(3)
-    
-        with col1:
-            st.markdown("""
-        <div style="background: linear-gradient(135deg, #000000, #0d47a1); padding: 15px; border-radius: 10px; border-left: 5px solid #2196f3;">
-            <h4>📊 Multinomial Naive Bayes</h4>
-            <p><strong>Best for:</strong> Text classification</p>
-            <p><strong>Strengths:</strong> Fast, works with small datasets</p>
-            <p><strong>Use case:</strong> Spam detection baseline</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-        with col2:
-            st.markdown("""
-        <div style="background: linear-gradient(135deg, #000000, #4a148c); padding: 15px; border-radius: 10px; border-left: 5px solid #8b42e3;">
-            <h4>📈 Logistic Regression</h4>
-            <p><strong>Best for:</strong> Binary classification</p>
-            <p><strong>Strengths:</strong> Interpretable, probabilistic</p>
-            <p><strong>Use case:</strong> Linear decision boundaries</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-        with col3:
-            st.markdown("""
-        <div style="background: linear-gradient(135deg, #000000, #1b5e20); padding: 15px; border-radius: 10px; border-left: 5px solid #4caf50;">
-            <h4>🌳 Random Forest</h4>
-            <p><strong>Best for:</strong> Complex patterns</p>
-            <p><strong>Strengths:</strong> Handles overfitting</p>
-            <p><strong>Use case:</strong> Ensemble learning</p>
-        </div>
-        """, unsafe_allow_html=True)
-            
-        
-
-elif app_mode == "🛡️ Security Tips":
-    st.header("🛡️ Spam Protection Guide")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("🚨 Common Spam Indicators")
-        
-        with st.expander("💰 Money-Related Red Flags"):
-            st.write("• You won money/prizes!")
-            st.write("• Send money now")
-            st.write("• Get rich quick schemes")
-            st.write("• Free money offers")
-        
-        with st.expander("⏰ Urgency Tactics"):
-            st.write("• Act now or lose forever")
-            st.write("• Limited time only")
-            st.write("• Expires today")
-            st.write("• Immediate action required")
-        
-        with st.expander("📱 Suspicious Contacts"):
-            st.write("• Unknown phone numbers")
-            st.write("• Fake email addresses")
-            st.write("• Generic greetings")
-            st.write("• Poor grammar/spelling")
-    
-    with col2:
-        st.subheader("🛡️ Protection Methods")
-        
-        with st.expander("📧 Email Security"):
-            st.write("• Enable spam filters")
-            st.write("• Don't click suspicious links")
-            st.write("• Verify sender identity")
-            st.write("• Report spam messages")
-        
-        with st.expander("📱 SMS Security"):
-            st.write("• Block unknown numbers")
-            st.write("• Don't reply to spam")
-            st.write("• Use carrier spam protection")
-            st.write("• Be cautious with links")
-        
-        with st.expander("🔐 General Tips"):
-            st.write("• Keep personal info private")
-            st.write("• Use strong passwords")
-            st.write("• Enable 2-factor authentication")
-            st.write("• Stay updated on scam trends")
-    
-    st.warning("⚠️ **Important:** This tool is for educational purposes. Always verify suspicious messages through official channels!")
-
-elif app_mode == "📋 Project Info":
-    st.header("📋 Project Information")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        <div style="
-            background: linear-gradient(135deg, #000000, #667eea);
-            padding: 25px;
-            border-radius: 12px;
-            border-left: 5px solid #667eea;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        ">
-            <h3 style="color: #667eea; margin-top: 0;">👨‍🎓 Students Information</h3>
-            <p><strong>Students Name:</strong> Yash & Karan</p>
-            <p><strong>Class:</strong> B.Sc. (Data Science Sem V)</p>
-            <p><strong>Project Title:</strong> Spam Detector - Email & SMS Spam Detection System</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("""
-        <div style="
-            background: linear-gradient(135deg, #000000, #5403a6);
-            padding: 25px;
-            border-radius: 12px;
-            border-left: 5px solid #5403a6;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        ">
-            <h3 style="color: #764ba2; margin-top: 0;">🛠️ Technical Stack</h3>
-            <p><strong>Language:</strong> Python</p>
-            <p><strong>Platform:</strong> VS Code</p>
-            <p><strong>Data:</strong> Spam and Ham text(Sample Data)</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        
-        st.markdown("""
-        <div style="
-             background: linear-gradient(135deg, #000000, #a902bd);
-            padding: 25px;
-            border-radius: 12px;
-            border-left: 5px solid #a902bd;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        ">
-            <h3 style="color: #f093fb; margin-top: 0;">📚 Libraries & Packages</h3>
-            <ul style="line-height: 1.8;">
-                <li><strong>Streamlit</strong> - Web Interface</li>
-                <li><strong>Pandas</strong> - Data Manipulation</li>
-                <li><strong>NumPy</strong> - Numerical Computing</li>
-                <li><strong>Scikit-learn</strong> - Machine Learning</li>
-                <li><strong>NLTK</strong> - Natural Language Processing</li>
-                <li><strong>Matplotlib & Seaborn</strong> - Data Visualization</li>
-                <li><strong>Plotly</strong> - Interactive Plots</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("""
-        <div style="
-            background: linear-gradient(135deg, #000000, #f56e73);
-            padding: 25px;
-            border-radius: 12px;
-            border-left: 5px solid #f56e73;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        ">
-            <h3 style="color: #ff9a9e; margin-top: 0;">🧠 NLP Techniques</h3>
-            <ul style="line-height: 1.8;">
-                <li><strong>Text Preprocessing</strong></li>
-                <li><strong>Tokenization</strong></li>
-                <li><strong>Stop Words Removal</strong></li>
-                <li><strong>Stemming</strong></li>
-                <li><strong>TF-IDF Vectorization</strong></li>
-                <li><strong>Feature Extraction</strong></li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-         
-        
-        
-        st.markdown("""
-        <div style="
-            background: linear-gradient(135deg, #000000, #b56a04);
-            padding: 25px;
-            border-radius: 12px;
-            border-left: 5px solid #b56a04;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        ">
-            <h3 style="color: #fcb045; margin-top: 0;">🤖 ML Modules</h3>
-            <ul style="line-height: 1.8;">
-                <li><strong>TfidfVectorizer</strong> - Text Feature Extraction</li>
-                <li><strong>MultinomialNB</strong> - Naive Bayes Classifier</li>
-                <li><strong>LogisticRegression</strong> - Linear Classification</li>
-                <li><strong>RandomForestClassifier</strong> - Ensemble Method</li>
-                <li><strong>Pipeline</strong> - ML Pipeline</li>
-                <li><strong>PorterStemmer</strong> - Text Preprocessing</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-       
-      # System Architecture
-    # st.subheader("🏗️ System Architecture")
-
-    # with st.expander("Step 1. Raw Text Input"):
-    #      st.markdown("""↓↓↓↓↓↓↓↓↓↓↓↓↓↓""")
-    # with st.expander("Step 2.ext Preprocessing (6 steps)"):
-    #      st.markdown("""↓↓↓↓↓↓↓↓↓↓↓↓↓↓""")
-    # with st.expander("Step 3.TF-IDF Vectorization (max 1000 features)"):
-    #      st.markdown("""↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓""")
-    # with st.expander("Step 4.ML Model Pipeline (3 models)"):
-    #      st.markdown("""↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓""")
-    # with st.expander("Step 5.Best Model Selection"):
-    #      st.markdown("""↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓""")
-    # with st.expander("Step 6.Prediction Result"):
-    #      st.markdown("""  We get result SPAM or NOT SPAM """)
-    #      st.success("NOT SPAM")
-    #      st.write("OR")
-    #      st.error("SPAM")
-
- # System Architecture
-    st.subheader("🏗️ System Architecture")
-
-# Add a brief intro for context
-    st.markdown("This diagram outlines the end-to-end pipeline for our Spam Detector model.")
-
-# Use columns or custom CSS for a more diagram-like feel, but keep it simple
-    with st.expander("Step 1: Raw Text Input"):
-        st.markdown("""
-    - User provides raw email/SMS text.
-    - Example: "Congratulations! You've won a free iPhone. Click here to claim."
-    """)
-
-    st.markdown("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")  # Shorten arrows for cleaner look
-
-    with st.expander("Step 2: Text Preprocessing (6 steps)"):
-        st.markdown("""
-    1. Lowercase conversion
-    2. Remove punctuation
-    3. Tokenization
-    4. Stopword removal
-    5. Stemming/Lemmatization
-    6. Handle special characters/emojis
-    """)
-
-    st.markdown("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
-
-    with st.expander("Step 3: TF-IDF Vectorization (max 1000 features)"):
-     st.markdown("""
-    - Convert text to numerical features using TF-IDF.
-    - Limit to top 1000 features for efficiency.
-    """)
-
-    st.markdown("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
-
-    with st.expander("Step 4: ML Model Pipeline (3 models)"):
-        st.markdown("""
-    - Train/evaluate multiple models: e.g., Naive Bayes, SVM, Random Forest.
-    - Use a pipeline for streamlined training.
-    """)
-    st.markdown("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
-
-    with st.expander("Step 5: Best Model Selection"):
-     st.markdown("""
-    - Evaluate models using accuracy, F1-score, etc.
-    - Select the best based on cross-validation.
-    """)
-
-    st.markdown("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
-
-    with st.expander("Step 6: Prediction Result"):
-            st.markdown("We get result: SPAM or NOT SPAM ")
-   
-        
-            st.error("SPAM")
-            st.write("OR")
-            st.success("NOT SPAM")
-
-
-
-
-
-
-    # Project features overview
-    st.markdown("""
-    <div style="
-        background: linear-gradient(135deg, #ffecd2 0%, #fcb045 100%);
-        padding: 25px;
-        border-radius: 15px;
-        margin: 30px 0;
-        color: #333;
-    ">
-        <h3 style="text-align: center; margin-bottom: 20px;">🌟 Project Features</h3>
-        <div style="display: flex; flex-wrap: wrap; justify-content: space-around;">
-            <div style="text-align: center; margin: 10px;">
-                <h4>🔍 Text Analysis</h4>
-                <p>Advanced NLP preprocessing</p>
-            </div>
-            <div style="text-align: center; margin: 10px;">
-                <h4>🤖 Multiple Models</h4>
-                <p>3 ML algorithms comparison</p>
-            </div>
-            <div style="text-align: center; margin: 10px;">
-                <h4>📊 Real-time Prediction</h4>
-                <p>Instant spam detection</p>
-            </div>
-            <div style="text-align: center; margin: 10px;">
-                <h4>🛡️ Security Tips</h4>
-                <p>Educational content</p>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Final Summary
-    st.markdown("""
-    ---
-    <div style="
-        background: linear-gradient(135deg, #000000 0%, #DE238A 100%);
-        padding: 20px;
-        border-radius: 15px;
-        text-align: center;
-        margin: 20px 0;
-    ">
-        <h3>🎉 Thank you for exploring our Spam Detection System!</h3>
-        <p>This project demonstrates the power of Machine Learning in cybersecurity applications, 
-        combining multiple algorithms with an intuitive web interface for real-world spam detection.</p>
-        <p><strong>Built with ❤️ using Python, Streamlit, and Scikit-learn</strong></p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    #  # Academic note
-    # st.info("📝 **Academic Note:** This project demonstrates practical application of machine learning concepts learned in Data Science curriculum, focusing on text classification and natural language processing techniques.")
- 
-else:  # File upload
+    else:  # File upload
         uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
         
         if uploaded_file is not None:
@@ -952,9 +860,360 @@ else:  # File upload
                         st.dataframe(display_df)
                         
             except Exception as e:
-                st.error(f"❌ Error processing file: {str(e)}")
+                st.error(f"❌ Error processing file: {str(e)}") 
+            
+        
+
+elif app_mode == "🛡️ Security Tips":
+    st.header("🛡️ Spam Protection Guide")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🚨 Common Spam Indicators")
+        
+        with st.expander("💰 Money-Related Red Flags"):
+            st.write("• You won money/prizes!")
+            st.write("• Send money now")
+            st.write("• Get rich quick schemes")
+            st.write("• Free money offers")
+        
+        with st.expander("⏰ Urgency Tactics"):
+            st.write("• Act now or lose forever")
+            st.write("• Limited time only")
+            st.write("• Expires today")
+            st.write("• Immediate action required")
+        
+        with st.expander("📱 Suspicious Contacts"):
+            st.write("• Unknown phone numbers")
+            st.write("• Fake email addresses")
+            st.write("• Generic greetings")
+            st.write("• Poor grammar/spelling")
+    
+    with col2:
+        st.subheader("🛡️ Protection Methods")
+        
+        with st.expander("📧 Email Security"):
+            st.write("• Enable spam filters")
+            st.write("• Don't click suspicious links")
+            st.write("• Verify sender identity")
+            st.write("• Report spam messages")
+        
+        with st.expander("📱 SMS Security"):
+            st.write("• Block unknown numbers")
+            st.write("• Don't reply to spam")
+            st.write("• Use carrier spam protection")
+            st.write("• Be cautious with links")
+        
+        with st.expander("🔐 General Tips"):
+            st.write("• Keep personal info private")
+            st.write("• Use strong passwords")
+            st.write("• Enable 2-factor authentication")
+            st.write("• Stay updated on scam trends")
+    
+    st.warning("⚠️ **Important:** This tool is for educational purposes. Always verify suspicious messages through official channels!")
+
+elif app_mode == "📋 Project Info":
+            st.header("📋 Project Information")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("""
+                <div style="
+                    background: linear-gradient(135deg, #000000, #667eea);
+                    padding: 25px;
+                    border-radius: 12px;
+                    border-left: 5px solid #667eea;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                    margin-bottom: 20px;
+                ">
+                    <h3 style="color: #667eea; margin-top: 0;">👨‍🎓 Students Information</h3>
+                    <p><strong>Students Name:</strong> Yash & Karan</p>
+                    <p><strong>Class:</strong> B.Sc. (Data Science Sem V)</p>
+                    <p><strong>Project Title:</strong> Spam Detector - Email & SMS Spam Detection System</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown("""
+                <div style="
+                    background: linear-gradient(135deg, #000000, #5403a6);
+                    padding: 25px;
+                    border-radius: 12px;
+                    border-left: 5px solid #5403a6;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                    margin-bottom: 20px;
+                ">
+                    <h3 style="color: #764ba2; margin-top: 0;">🛠️ Technical Stack</h3>
+                    <p><strong>Language:</strong> Python</p>
+                    <p><strong>Platform:</strong> VS Code</p>
+                    <p><strong>Data:</strong> SMS Spam Collection Dataset from - Kaggle</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                
+                st.markdown("""
+                <div style="
+                    background: linear-gradient(135deg, #000000, #a902bd);
+                    padding: 25px;
+                    border-radius: 12px;
+                    border-left: 5px solid #a902bd;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                    margin-bottom: 20px;
+                ">
+                    <h3 style="color: #f093fb; margin-top: 0;">📚 Libraries & Packages</h3>
+                    <ul style="line-height: 1.8;">
+                        <li><strong>Streamlit</strong> - Web Interface</li>
+                        <li><strong>Pandas</strong> - Data Manipulation</li>
+                        <li><strong>NumPy</strong> - Numerical Computing</li>
+                        <li><strong>Scikit-learn</strong> - Machine Learning</li>
+                        <li><strong>NLTK</strong> - Natural Language Processing</li>
+                        <li><strong>Matplotlib & Seaborn</strong> - Data Visualization</li>
+                        <li><strong>Plotly</strong> - Interactive Plots</li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown("""
+                <div style="
+                    background: linear-gradient(135deg, #000000, #f56e73);
+                    padding: 25px;
+                    border-radius: 12px;
+                    border-left: 5px solid #f56e73;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                    margin-bottom: 20px;
+                ">
+                    <h3 style="color: #ff9a9e; margin-top: 0;">🧠 NLP Techniques</h3>
+                    <ul style="line-height: 1.8;">
+                        <li><strong>Text Preprocessing</strong></li>
+                        <li><strong>Tokenization</strong></li>
+                        <li><strong>Stop Words Removal</strong></li>
+                        <li><strong>Stemming</strong></li>
+                        <li><strong>TF-IDF Vectorization</strong></li>
+                        <li><strong>Feature Extraction</strong></li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+            
+                # System Architecture
+                st.markdown("""
+                <div style="
+                    background: linear-gradient(135deg, #000000, #635f5f);
+                    padding: 25px;
+                    border-radius: 12px;
+                    border-left: 5px solid #635f5f;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                    margin-bottom: 20px;
+                "><h3>🏗️ System Architecture</h3>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Add a brief intro for context
+                st.markdown("This diagram outlines the end-to-end pipeline for our Spam Detector model.")
+
+            # Use columns or custom CSS for a more diagram-like feel, but keep it simple
+                with st.expander("Step 1: Raw Text Input"):
+                    st.markdown("""
+                - User provides raw email/SMS text.
+                - Example: "Congratulations! You've won a free iPhone. Click here to claim."
+                """)
+
+                    st.markdown("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")  # Shorten arrows for cleaner look
+
+                with st.expander("Step 2: Text Preprocessing (6 steps)"):
+                    st.markdown("""
+                1. Lowercase conversion
+                2. Remove punctuation
+                3. Tokenization
+                4. Stopword removal
+                5. Stemming/Lemmatization
+                6. Handle special characters/emojis
+                """)
+
+                    st.markdown("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
+
+                with st.expander("Step 3: TF-IDF Vectorization (max 1000 features)"):
+                    st.markdown("""
+                - Convert text to numerical features using TF-IDF.
+                - Limit to top 1000 features for efficiency.
+                """)
+
+                    st.markdown("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
+
+                with st.expander("Step 4: ML Model Pipeline (5 models)"):
+                    st.markdown("""
+                - Train/evaluate multiple models: e.g., 1.Multinomial Naive Bayes, 2.Logistic Regression, 3.Random Forest, 4.Support Vector Machine, 5.Gradient Boosting.
+                - Use a pipeline for streamlined training.
+                """)
+                    st.markdown("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
+
+                with st.expander("Step 5: Best Model Selection"):
+                    st.markdown("""
+                - Evaluate models using accuracy, F1-score, etc.
+                - Select the best based on cross-validation.
+                """)
+
+                    st.markdown("↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
+
+                with st.expander("Step 6: Prediction Result"):
+                        st.markdown("We get result: SPAM or NOT SPAM ")
+            
+                    
+                        st.error("SPAM")
+                        st.write("OR")
+                        st.success("NOT SPAM")
+            
+            # System Architecture
+            # st.subheader("🏗️ System Architecture")
+
+            # with st.expander("Step 1. Raw Text Input"):
+            #      st.markdown("""↓↓↓↓↓↓↓↓↓↓↓↓↓↓""")
+            # with st.expander("Step 2.ext Preprocessing (6 steps)"):
+            #      st.markdown("""↓↓↓↓↓↓↓↓↓↓↓↓↓↓""")
+            # with st.expander("Step 3.TF-IDF Vectorization (max 1000 features)"):
+            #      st.markdown("""↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓""")
+            # with st.expander("Step 4.ML Model Pipeline (3 models)"):
+            #      st.markdown("""↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓""")
+            # with st.expander("Step 5.Best Model Selection"):
+            #      st.markdown("""↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓""")
+            # with st.expander("Step 6.Prediction Result"):
+            #      st.markdown("""  We get result SPAM or NOT SPAM """)
+            #      st.success("NOT SPAM")
+            #      st.write("OR")
+            #      st.error("SPAM")
+
+            st.subheader("🤖 Machine Learning Models :")
+            
+            col1, col2 = st.columns(2)
+
+            with col1:
+                    st.markdown("""
+                    <div style="background: linear-gradient(135deg, #000000, #0d47a1); padding: 15px; border-radius: 10px; border-left: 5px solid #2196f3;">
+                        <h4>📊 Multinomial Naive Bayes</h4>
+                        <p><strong>Best for:</strong> Text classification</p>
+                        <p><strong>Strengths:</strong> Fast, works with small datasets</p>
+                        <p><strong>Use case:</strong> Spam detection baseline</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.markdown("  ")
+                    st.markdown("""
+                    <div style="background: linear-gradient(135deg, #000000, #1b5e20); padding: 15px; border-radius: 10px; border-left: 5px solid #4caf50;">
+                        <h4>🌳 Random Forest</h4>
+                        <p><strong>Best for:</strong> Complex patterns</p>
+                        <p><strong>Strengths:</strong> Handles overfitting</p>
+                        <p><strong>Use case:</strong> Ensemble learning</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.markdown("  ")
+                    st.markdown("""
+                    <div style="background: linear-gradient(135deg, #000000, #e65100); padding: 15px; border-radius: 10px; border-left: 5px solid #ff9800;">
+                        <h4>🚀 Gradient Boosting</h4>
+                        <p><strong>Best for:</strong> Sequential learning</p>
+                        <p><strong>Strengths:</strong> High accuracy</p>
+                        <p><strong>Use case:</strong> Advanced ensemble</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            with col2:
+                    st.markdown("""
+                    <div style="background: linear-gradient(135deg, #000000, #4a148c); padding: 15px; border-radius: 10px; border-left: 5px solid #8b42e3;">
+                        <h4>📈 Logistic Regression</h4>
+                        <p><strong>Best for:</strong> Binary classification</p>
+                        <p><strong>Strengths:</strong> Interpretable, probabilistic</p>
+                        <p><strong>Use case:</strong> Linear decision boundaries</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    st.markdown("  ")
+                    st.markdown("""
+                    <div style="background: linear-gradient(135deg, #000000, #b71c1c); padding: 15px; border-radius: 10px; border-left: 5px solid #f44336;">
+                        <h4>⚡ Support Vector Machine</h4>
+                        <p><strong>Best for:</strong> High-dimensional data</p>
+                        <p><strong>Strengths:</strong> Excellent for text</p>
+                        <p><strong>Use case:</strong> Maximum margin classification</p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
 
+
+            # Project features overview
+            st.markdown("""
+            <div style="
+                background: linear-gradient(135deg, #ffecd2 0%, #fcb045 100%);
+                padding: 25px;
+                border-radius: 15px;
+                margin: 30px 0;
+                color: #333;
+            ">
+                <h3 style="text-align: center; margin-bottom: 20px;">🌟 Project Features</h3>
+                <div style="display: flex; flex-wrap: wrap; justify-content: space-around;">
+                    <div style="text-align: center; margin: 10px;">
+                        <h4>🔍 Text Analysis</h4>
+                        <p>Advanced NLP preprocessing</p>
+                    </div>
+                    <div style="text-align: center; margin: 10px;">
+                        <h4>🤖 Multiple Models</h4>
+                        <p>3 ML algorithms comparison</p>
+                    </div>
+                    <div style="text-align: center; margin: 10px;">
+                        <h4>📊 Real-time Prediction</h4>
+                        <p>Instant spam detection</p>
+                    </div>
+                    <div style="text-align: center; margin: 10px;">
+                        <h4>🛡️ Security Tips</h4>
+                        <p>Educational content</p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Final Summary
+            st.markdown("""
+            ---
+            <div style="
+                background: linear-gradient(135deg, #000000 0%, #DE238A 100%);
+                padding: 20px;
+                border-radius: 15px;
+                text-align: center;
+                margin: 20px 0;
+            ">
+                <h3>🎉 Thank you for exploring our Spam Detection System!</h3>
+                <p>This project demonstrates the power of Machine Learning in cybersecurity applications, 
+                combining multiple algorithms with an intuitive web interface for real-world spam detection.</p>
+                <p><strong>Built with ❤️ using Python, Streamlit, and Scikit-learn</strong></p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            #  # Academic note
+            # st.info("📝 **Academic Note:** This project demonstrates practical application of machine learning concepts learned in Data Science curriculum, focusing on text classification and natural language processing techniques.")
+ 
+
+if hasattr(st, 'cache_data'):
+    try:
+        # Check if we need to clear cache due to format changes
+        if 'model_scores' in st.session_state:
+            first_model_scores = next(iter(st.session_state.model_scores.values()), {})
+            if 'f1_score' not in first_model_scores:
+                # Clear old cache
+                st.cache_data.clear()
+                st.cache_resource.clear()
+                # Clear session state
+                for key in ['trained_models', 'model_scores', 'X_test', 'y_test']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+    except Exception:
+        pass
+
+# Alternative simple fix - add a button to manually clear cache in sidebar:
+st.sidebar.markdown("---")
+if st.sidebar.button("🔄 Clear Cache & Retrain"):
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    for key in ['trained_models', 'model_scores', 'X_test', 'y_test']:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.sidebar.success("Cache cleared! Try prediction again.")
 # Footer
 st.markdown("---")
 st.markdown("""
