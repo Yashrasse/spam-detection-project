@@ -75,7 +75,7 @@ animation_css = """
     border-radius: 10px;
     animation: rotate_gradient 4s linear infinite;
 	background: linear-gradient(-40deg,#ff0000, #000000, #000000);
-	background-size: 180% 100%;
+	background-size: 200% 100%;
 	animation: gradient 10s ease infinite;
 	height: auto;
     text-align: center;
