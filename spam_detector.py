@@ -63,18 +63,50 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+from streamlit_lottie import st_lottie
 
+
+# Define your custom CSS with the animation
+animation_css = """
+<style>
+
+.main-header{
+    padding: 15px;
+    border-radius: 10px;
+    animation: rotate_gradient 4s linear infinite;
+	background: linear-gradient(-40deg,#ff0000, #000000, #000000);
+	background-size: 180% 100%;
+	animation: gradient 10s ease infinite;
+	height: auto;
+    text-align: center;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+@keyframes gradient {
+	0% {
+		background-position: 0% 50%;
+	}
+	50% {
+		background-position: 100% 50%;
+	}
+	100% {
+		background-position: 0% 50%;
+	}
+}
+
+</style>
+"""
+
+# Inject the custom CSS into the Streamlit app
+st.markdown(animation_css, unsafe_allow_html=True)
 # Custom CSS for better styling
 st.markdown("""
 <style>
-    .main-header {
-        background: linear-gradient(80deg, #000000, #FF0000);
-        color: white;
-        padding: 20px;
-        border-radius: 10px;
-        text-align: center;
-        margin-bottom: 30px;
-    }
     .metric-card {
         background: white;
         padding: 20px;
@@ -477,7 +509,7 @@ if app_mode == "🔍 Make Prediction":
                 st.write("**Processed:**", processed_message)
         # Machine Learning Models Section
     #with st.expander("Used -🤖 Machine Learning Models "):
-        st.subheader("🤖 Machine Learning Models")
+        st.subheader("🤖 Machine Learning Models :")
     
         col1, col2, col3 = st.columns(3)
     
@@ -925,7 +957,7 @@ else:  # File upload
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666666;'>
-    <p> Spam Detection System | Built with Streamlit & Machine Learning</p>
+    <p> Spam Detection System | Machine Learning</p>
     <p>Protecting your inbox with intelligent ML-powered detection</p>
 </div>
 """, unsafe_allow_html=True)
