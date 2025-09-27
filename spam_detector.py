@@ -1154,7 +1154,7 @@ elif app_mode == "📋 Project Info":
                     </div>
                     <div style="text-align: center; margin: 10px;">
                         <h4>🤖 Multiple Models</h4>
-                        <p>3 ML algorithms comparison</p>
+                        <p>5 ML algorithms comparison</p>
                     </div>
                     <div style="text-align: center; margin: 10px;">
                         <h4>📊 Real-time Prediction</h4>
